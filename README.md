@@ -112,10 +112,10 @@ Edit `configs/config.yaml` to adjust:
 
 ## Authors
 
-Ahmed Fatah Majeed 
-Barham Azad Tawfeeq
-Las Azad Taha 
+- **Barham Azad Tawfeeq**
+- **Ahmed Fatah Majeed**
+- **Las Azad Taha**
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
