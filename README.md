@@ -110,9 +110,11 @@ Edit `configs/config.yaml` to adjust:
 - **OpenCV**: Image processing and video handling
 - **PyTorch**: Deep learning framework
 
-## Author
+## Authors
 
-Your Name
+Ahmed Fatah Majeed 
+Barham Azad Tawfeeq
+Las Azad Taha 
 
 ## License
 
