@@ -1,3 +1,3 @@
-"""Zombie Laser Targeting System"""
+"""ALDS"""
 
 __version__ = "1.0.0"

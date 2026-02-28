@@ -12,7 +12,7 @@ from src.depth_estimation.depth_estimator import DepthEstimator
 from src.laser_control.laser_controller import LaserController
 
 
-class ZombieLaserTargetingSystem:
+class ALDS:
     """Main system for zombie detection and laser targeting"""
     
     def __init__(self, config_path: str):
@@ -161,7 +161,7 @@ class ZombieLaserTargetingSystem:
                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
                 # Display
-                cv2.imshow("Zombie Laser Targeting System", output_frame)
+                cv2.imshow("ALDS", output_frame)
                 
                 # Save video
                 if self.video_writer:
@@ -187,7 +187,7 @@ class ZombieLaserTargetingSystem:
 
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser(description="Zombie Laser Targeting System")
+    parser = argparse.ArgumentParser(description="ALDS")
     parser.add_argument("--config", type=str, default="configs/config.yaml",
                        help="Path to configuration file")
     args = parser.parse_args()
