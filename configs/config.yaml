@@ -1,0 +1,42 @@
+# Zombie Laser Targeting System Configuration
+
+# YOLOv8 Detection Settings
+detection:
+  model: models/yolov8m.pt
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+  classes:  # Classes to detect
+    - human
+    - zombie
+
+# Depth Estimation Settings
+depth:
+  model: depth_anything_v2
+  encoder: vits  # vits, vitb, vitl
+  device: cuda  # cuda or cpu
+  input_size: 518
+
+# Laser Control Settings
+laser:
+  enabled: true
+  port: /dev/ttyUSB0  # Serial port for laser control
+  baud_rate: 9600
+  target_class: zombie  # Only target zombies, exclude humans
+  min_distance: 0.5     # Minimum distance in meters
+  max_distance: 10.0    # Maximum distance in meters
+
+# Video Input Settings
+video:
+  source: 0  # 0 for webcam, or path to video file
+  fps: 30
+  width: 640
+  height: 480
+  flip_horizontal: false
+
+# Output Settings
+output:
+  save_results: true
+  results_dir: results/
+  save_video: true
+  draw_bbox: true
+  draw_depth: true

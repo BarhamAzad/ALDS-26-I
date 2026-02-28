@@ -1,0 +1,32 @@
+# 3D Models Directory
+
+Place your mechanical design files here:
+
+- `frame_base.step` - Main base frame
+- `frame_base.stl` - 3D printable base frame
+- `pan_platform.step` - Pan rotation platform
+- `pan_platform.stl`
+- `tilt_arm.step` - Tilt rotation arm  
+- `tilt_arm.stl`
+- `camera_bracket.step` - Camera mounting bracket
+- `camera_bracket.stl`
+- `laser_mount.step` - Laser module mount
+- `laser_mount.stl`
+- `servo_bracket.step` - Servo mounting brackets
+- `servo_bracket.stl`
+
+## Design Software
+
+Recommended tools:
+- FreeCAD (free, open-source)
+- Fusion 360 (free for students/startups)
+- OpenSCAD (parametric design)
+- Blender (general 3D modeling)
+
+## Print Settings (for FDM 3D printing)
+
+- **Nozzle Temp**: 210-220°C (PETG)
+- **Bed Temp**: 60-80°C (PETG)
+- **Layer Height**: 0.2mm
+- **Infill**: 15-20%
+- **Orientation**: Check for minimal supports needed

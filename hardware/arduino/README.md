@@ -1,0 +1,80 @@
+# Arduino Laser Controller Setup
+
+## Components
+
+### Servos
+- **Pan Servo**: SG90 or MG90S (horizontal movement)
+- **Tilt Servo**: SG90 or MG90S (vertical movement)
+- Power: 5V, 500mA per servo
+
+### Laser Module
+- **Type**: 5V laser diode module (laser pointer or actual laser)
+- **Power**: 5V, ~50mA
+- **Control**: Direct pin control (HIGH = on, LOW = off)
+
+### Relay Module
+- **Type**: Single-channel 5V relay module
+- **Purpose**: Fire trigger mechanism
+- **Control**: GPIO pin switching
+
+### Arduino
+- **Board**: Arduino Uno or Nano
+- **Serial**: USB to TTL 9600 baud
+- **Supply**: 9V via barrel jack (or USB)
+
+## Pin Configuration
+
+| Component | Arduino Pin | Function |
+|-----------|-------------|----------|
+| Pan Servo | D9 (PWM) | Horizontal servo control |
+| Tilt Servo | D10 (PWM) | Vertical servo control |
+| Laser | D11 | Laser enable |
+| Relay (Fire) | D12 | Fire trigger mechanism |
+
+## Wiring Diagram
+
+```
+Arduino 5V ──┬─── Pan Servo (red wire)
+             ├─── Tilt Servo (red wire)
+             ├─── Laser Module (5V+)
+             └─── Relay Module (VCC)
+
+Arduino GND ─┬─── Pan Servo (black wire)
+             ├─── Tilt Servo (black wire)
+             ├─── Laser Module (GND)
+             └─── Relay Module (GND)
+
+D9 (PWM) ────── Pan Servo (yellow/signal wire)
+D10 (PWM) ───── Tilt Servo (yellow/signal wire)
+D11 ──────────── Laser Module (IN)
+D12 ──────────── Relay Module (IN)
+```
+
+## Serial Commands
+
+Send commands via Serial at 9600 baud:
+
+```
+PAN:45.5,TILT:30.2  # Move to Pan: 45.5°, Tilt: 30.2°
+FIRE:ON              # Turn on laser and fire
+FIRE:OFF             # Turn off laser and fire
+STATUS               # Get current status
+```
+
+## Installation
+
+1. Upload `laser_controller.ino` to Arduino board
+2. Connect components according to wiring diagram
+3. Power Arduino (9V or USB)
+4. Connect USB to computer for serial communication
+5. Python script will communicate at `/dev/ttyUSB0` or `COM3` (Windows)
+
+## Testing
+
+```
+# In Arduino IDE Serial Monitor (9600 baud):
+PAN:90,TILT:90   # Center position
+FIRE:ON
+FIRE:OFF
+STATUS
+```
