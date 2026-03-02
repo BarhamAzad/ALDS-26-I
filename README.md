@@ -78,7 +78,7 @@ python main.py --config configs/config.yaml
 
 ## Media Engagment
 ### Social Media Channels:
-- **[Instagram](https://www.instagram.com/alds_26_i/)
+- [Instagram](https://www.instagram.com/alds_26_i/)
 
 
 ## License
