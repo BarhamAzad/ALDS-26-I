@@ -76,6 +76,11 @@ python main.py --config configs/config.yaml
 - **[Mechanical Design](hardware/mechanical/README.md)** - Platform specifications
 - **[3D Printing](hardware/3d_printing/README.md)** - Print settings and files
 
+## Media Engagment
+###Social Media Channels:
+- ** [Instagram](https://www.instagram.com/alds_26_i/)
+
+
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 Key Technologies
