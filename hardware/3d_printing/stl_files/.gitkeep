@@ -2,7 +2,7 @@
 
 Place your 3D model STL files here:
 
-- `frame_base.stl` - Main base frame (mounting point for pan servo)
+- `frame_base.stl` - Main base frame (mounting platform for the pan servo, also the housing for the batteries, Arduino Mega microcontroller and other hardware components.)
 - `pan_platform.stl` - Rotating platform for pan servo
 - `tilt_arm.stl` - Arm controlled by tilt servo
 - `camera_bracket.stl` - USB camera and depth sensor mount
