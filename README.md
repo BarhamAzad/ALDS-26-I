@@ -77,8 +77,8 @@ python main.py --config configs/config.yaml
 - **[3D Printing](hardware/3d_printing/README.md)** - Print settings and files
 
 ## Media Engagment
-###Social Media Channels:
-- ** [Instagram](https://www.instagram.com/alds_26_i/)
+### Social Media Channels:
+- **[Instagram](https://www.instagram.com/alds_26_i/)
 
 
 ## License
