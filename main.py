@@ -1,4 +1,4 @@
-"""Main entry point for Zombie Laser Targeting System"""
+"""Main entry point for ALDS"""
 
 import argparse
 import cv2
@@ -192,7 +192,7 @@ def main():
                        help="Path to configuration file")
     args = parser.parse_args()
     
-    system = ZombieLaserTargetingSystem(args.config)
+    system = ALDS(args.config)
     system.run()
 
 
