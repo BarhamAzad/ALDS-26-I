@@ -74,10 +74,14 @@ class LaserController:
         cx = (bbox[0] + bbox[2]) / 2
         cy = (bbox[1] + bbox[3]) / 2
         
-        # Normalize to frame center
+        # Normalize to frame center and map to servo range (0-180 degrees)
         h, w = frame_shape
-        pan = ((cx - w/2) / (w/2)) * 45  # Convert to degrees (-45 to +45)
-        tilt = ((cy - h/2) / (h/2)) * 45  # Convert to degrees (-45 to +45)
+        pan = 90 + ((cx - w/2) / (w/2)) * 90  # Convert to degrees (0 to 180)
+        tilt = 90 + ((cy - h/2) / (h/2)) * 90  # Convert to degrees (0 to 180)
+        
+        # Clamp to valid servo range
+        pan = np.clip(pan, 0, 180)
+        tilt = np.clip(tilt, 0, 180)
         
         self.move_laser(pan, tilt)
     
@@ -98,6 +102,19 @@ class LaserController:
         cy = (bbox[1] + bbox[3]) / 2
         
         distance = np.sqrt((laser_pos[0] - cx)**2 + (laser_pos[1] - cy)**2)
+        return distance <= tolerance
+    
+    def fire(self):
+        """
+        Fire laser (activate laser pointer)
+        """
+        if not self.is_connected:
+            return
+        
+        try:
+            self.serial_conn.write(b"FIRE\n")
+        except Exception as e:
+            print(f"Error firing laser: {e}")
         return distance <= tolerance
     
     def fire(self):
