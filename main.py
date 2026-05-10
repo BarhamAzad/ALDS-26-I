@@ -27,7 +27,8 @@ class ALDS:
         # Initialize modules
         self.detector = ObjectDetector(
             self.config["detection"]["model"],
-            self.config["detection"]["confidence_threshold"]
+            self.config["detection"]["confidence_threshold"],
+            self.config["detection"].get("classes"),
         )
         
         self.depth_estimator = DepthEstimator(
@@ -39,6 +40,7 @@ class ALDS:
             port=self.config["laser"]["port"],
             baud_rate=self.config["laser"]["baud_rate"]
         )
+        self.target_class = str(self.config["laser"].get("target_class", "zombie")).lower()
         
         self.video_handler = VideoHandler(
             source=self.config["video"]["source"],
@@ -57,41 +59,53 @@ class ALDS:
                 height=self.config["video"]["height"]
             )
     
-    def find_closest_zombie(self, detections: dict, depths: np.ndarray) -> dict:
+    @staticmethod
+    def _label_key(label: str) -> str:
+        if label == "human":
+            return "humans"
+        if label.endswith("y"):
+            return f"{label[:-1]}ies"
+        return f"{label}s"
+
+    def find_closest_target(self, detections: dict, depths: np.ndarray) -> dict | None:
         """
-        Find closest zombie that should be targeted
+        Find the closest configured target that should be tracked.
         
         Args:
             detections: Detection results
             depths: Depth map
             
         Returns:
-            Closest zombie info or None
+            Closest target info or None
         """
-        if not detections["zombies"]:
+        if not self.depth_estimator.is_ready:
             return None
-        
-        min_distance = float('inf')
-        closest_zombie = None
-        
-        for zombie in detections["zombies"]:
-            bbox = zombie["bbox"].astype(int)
-            # Get depth at center of bbox
+
+        target_key = self._label_key(self.target_class)
+        targets = detections.get(target_key, [])
+        if not targets:
+            return None
+
+        min_distance = float("inf")
+        closest_target = None
+
+        for target in targets:
+            bbox = target["bbox"].astype(int)
             cx = (bbox[0] + bbox[2]) // 2
             cy = (bbox[1] + bbox[3]) // 2
-            
+
             depth = self.depth_estimator.get_depth_at_point(depths, cx, cy)
-            
             if self.config["laser"]["min_distance"] <= depth <= self.config["laser"]["max_distance"]:
                 if depth < min_distance:
                     min_distance = depth
-                    closest_zombie = {
+                    closest_target = {
                         "bbox": bbox,
                         "depth": depth,
-                        "confidence": zombie["confidence"]
+                        "confidence": target["confidence"],
+                        "label": target["label"],
                     }
-        
-        return closest_zombie
+
+        return closest_target
     
     def run(self):
         """Run the main detection loop"""
@@ -136,30 +150,48 @@ class ALDS:
                     output_frame = cv2.addWeighted(output_frame, 0.7, depth_vis, 0.3, 0)
                 
                 # Find and target closest zombie
-                closest_zombie = self.find_closest_zombie(detections, depth)
-                
-                if closest_zombie and self.config["laser"]["enabled"]:
-                    bbox = closest_zombie["bbox"]
+                closest_target = self.find_closest_target(detections, depth)
+
+                if closest_target and self.config["laser"]["enabled"]:
+                    bbox = closest_target["bbox"]
                     self.laser_controller.target_bbox(bbox, frame.shape)
                     self.laser_controller.fire()
-                    
+
                     # Draw targeting reticle
                     cx = (bbox[0] + bbox[2]) // 2
                     cy = (bbox[1] + bbox[3]) // 2
                     cv2.circle(output_frame, (cx, cy), 30, (0, 0, 255), 2)
-                    cv2.putText(output_frame, f"TARGET: {closest_zombie['depth']:.2f}m", 
-                               (bbox[0], bbox[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 
-                               0.6, (0, 0, 255), 2)
+                    cv2.putText(
+                        output_frame,
+                        f"TARGET {closest_target['label'].upper()}: {closest_target['depth']:.2f}",
+                        (bbox[0], bbox[1] - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 0, 255),
+                        2,
+                    )
                 else:
                     if self.config["laser"]["enabled"]:
                         self.laser_controller.cease_fire()
-                
+
                 # Add UI information
-                cv2.putText(output_frame, f"Humans: {len(detections['humans'])}", 
+                human_count = len(detections.get("humans", []))
+                target_count = len(detections.get(self._label_key(self.target_class), []))
+                cv2.putText(output_frame, f"Humans: {human_count}",
                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(output_frame, f"Zombies: {len(detections['zombies'])}", 
+                cv2.putText(output_frame, f"{self.target_class.title()}s: {target_count}",
                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                
+
+                if not self.detector.is_ready:
+                    cv2.putText(output_frame, "Detector unavailable", (10, 90),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
+                if not self.depth_estimator.is_ready:
+                    cv2.putText(output_frame, "Depth unavailable", (10, 120),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
+                if self.config["laser"]["enabled"] and not self.laser_controller.is_connected:
+                    cv2.putText(output_frame, "Laser controller offline", (10, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
+
                 # Display
                 cv2.imshow("ALDS", output_frame)
                 

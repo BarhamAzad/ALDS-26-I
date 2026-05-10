@@ -24,18 +24,3 @@ def load_config(config_path: str) -> Dict[str, Any]:
         config = yaml.safe_load(f)
     
     return config
-
-
-def save_config(config: Dict[str, Any], config_path: str):
-    """
-    Save configuration to YAML file
-    
-    Args:
-        config: Configuration dictionary
-        config_path: Path to save config file
-    """
-    config_path = Path(config_path)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(config_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)

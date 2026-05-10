@@ -1,5 +1,7 @@
 # Hardware Integration Guide
 
+This document describes the current integration behavior in the repo as implemented.
+
 ## System Architecture
 
 ```
@@ -36,12 +38,12 @@
    - Returns bounding boxes with confidence
 
 3. **Depth Estimation** (`depth_estimator.py`)
-   - Depth Anything V2 analyzes frame
-   - Returns depth map
+   - Depth Anything V2 analyzes the frame when the model is available
+   - Returns a relative depth map normalized to `0..1`
 
 4. **Target Selection** (`main.py`)
-   - Finds closest zombie within distance range
-   - Excludes humans from targeting
+   - Finds the closest configured target class within the configured relative-depth range
+   - Excludes humans from targeting unless explicitly configured otherwise
    - Calculates servo angles
 
 5. **Laser Control** (`laser_controller.py`)
@@ -90,12 +92,13 @@ Frame:  (0,0) ─────────── (W,0)
          │                 │
         (0,H) ─────────── (W,H)
 
-Pan:   -45° ←──── 0° ────→ +45°  (left to right)
-Tilt:  -45° ←──── 0° ────→ +45°  (down to up)
+Servo command space:
+  pan  = 0° .. 180°
+  tilt = 0° .. 180°
 
-Conversion in main.py:
-  pan = ((cx - w/2) / (w/2)) * 45
-  tilt = ((cy - h/2) / (h/2)) * 45
+Conversion in `laser_controller.py`:
+  pan = 90 + ((cx - w/2) / (w/2)) * 90
+  tilt = 90 + ((cy - h/2) / (h/2)) * 90
 ```
 
 ## Connection Checklist
@@ -136,17 +139,21 @@ Conversion in main.py:
 In `configs/config.yaml`:
 ```yaml
 laser:
-  enabled: true
+  enabled: false
   port: /dev/ttyUSB0        # Adjust for your OS
   baud_rate: 9600
   target_class: zombie
-  min_distance: 0.5
-  max_distance: 10.0
+  min_distance: 0.05
+  max_distance: 0.95
 ```
+
+Notes:
+- `min_distance` and `max_distance` are relative depth thresholds, not calibrated meters.
+- The default config keeps hardware disabled until the controller has been tested separately.
 
 ## Performance Notes
 
 - **Servo Response Time**: ~0.1 seconds per command
 - **Detection FPS**: Depends on model (YOLOv8m: ~30-50 FPS)
-- **Latency**: ~100-150ms total (detection + control)
-- **Targeting Accuracy**: ±2-3° (servo resolution limited)
+- **Latency**: depends on your CPU/GPU, model sizes, and camera resolution.
+- **Targeting Accuracy**: depends on mechanical alignment, servo backlash, and your checkpoint quality.

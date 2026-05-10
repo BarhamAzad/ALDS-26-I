@@ -2,7 +2,8 @@
 
 ## STL Files Location
 
-All STL files for 3D printing are in `stl_files/`.
+All committed STL files for 3D printing are in `stl_files/`.
+At the moment, this repo includes `frame_base.stl`. The README below keeps the larger intended bill of materials for future expansion, but only files present in the repo should be treated as available.
 
 ## Recommended Print Settings
 
@@ -35,10 +36,10 @@ All STL files for 3D printing are in `stl_files/`.
 | File | Quantity | Weight | Est. Time | Cost* |
 |------|----------|--------|-----------|-------|
 | `frame_base.stl` | 1 | ~40g | 2-3h | $1-2 |
-| `pan_platform.stl` | 1 | ~30g | 1.5-2h | $1 |
-| `tilt_arm.stl` | 1 | ~25g | 1.5h | $0.75 |
-| `camera_bracket.stl` | 1 | ~15g | 1h | $0.50 |
-| `laser_mount.stl` | 1 | ~10g | 0.5-1h | $0.50 |
+| `pan_platform.stl` | planned | ~30g | 1.5-2h | $1 |
+| `tilt_arm.stl` | planned | ~25g | 1.5h | $0.75 |
+| `camera_bracket.stl` | planned | ~15g | 1h | $0.50 |
+| `laser_mount.stl` | planned | ~10g | 0.5-1h | $0.50 |
 
 **Total: ~120g, 6-8.5 hours, $4-5 per set*
 
@@ -80,12 +81,7 @@ All STL files for 3D printing are in `stl_files/`.
 
 ## Slicing Profiles
 
-Pre-made slicing profiles for common printers saved in `slicing_profiles/`:
-- `prusa_i3_petg.ini`
-- `creality_ender3_petg.ini`
-- `anycubic_i3_mega_petg.ini`
-
-*Add your printer profile if available*
+No slicing profiles are committed yet. Add your own slicer profile locally for your printer and material.
 
 ## Quality Checklist
 
@@ -122,7 +118,7 @@ Pre-made slicing profiles for common printers saved in `slicing_profiles/`:
 
 ## Assembly After Printing
 
-See `../mechanical/README.md` for full assembly instructions and calibration.
+See `../mechanical/README.md` for assembly notes and calibration guidance.
 
 ## Estimated Project Cost
 

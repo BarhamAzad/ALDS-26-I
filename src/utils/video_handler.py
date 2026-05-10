@@ -61,18 +61,6 @@ class VideoHandler:
         if self.cap:
             self.cap.release()
             self.is_open = False
-    
-    def get_fps(self) -> float:
-        """Get video FPS"""
-        if self.cap:
-            return self.cap.get(cv2.CAP_PROP_FPS)
-        return 0.0
-    
-    def get_frame_count(self) -> int:
-        """Get total frame count"""
-        if self.cap:
-            return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        return 0
 
 
 class VideoWriter:

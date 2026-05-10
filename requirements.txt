@@ -1,6 +1,6 @@
-ultralytics==8.2.0
-torch>=2.0.0
-torchvision>=0.15.0
+ultralytics>=8.4.48,<9
+torch>=2.0.0,<2.6
+torchvision>=0.15.0,<0.21
 opencv-python==4.10.0.84
 opencv-contrib-python==4.10.0.84
 numpy>=1.24.0
@@ -8,5 +8,7 @@ scipy>=1.10.0
 Pillow>=10.0.0
 matplotlib>=3.7.0
 PyYAML>=6.0
-transformers>=4.30.0
-pyserial>=3.5
+transformers>=4.38.0,<5
+huggingface-hub>=0.23.0,<1
+pyserial>=3.5,<4
+pytest>=8.0,<9
