@@ -19,6 +19,7 @@ depth:
 # Laser Control Settings
 laser:
   enabled: false
+  auto_fire: false      # Keep false for servo aiming/calibration; true sends FIRE:ON
   port: /dev/ttyUSB0  # Serial port for laser control
   baud_rate: 9600
   target_class: zombie  # Only target zombies, exclude humans

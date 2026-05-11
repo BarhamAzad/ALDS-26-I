@@ -38,4 +38,5 @@ logs/
 
 # Cache
 .pytest_cache/
+.ultralytics/
 .coverage
