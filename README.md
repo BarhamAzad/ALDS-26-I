@@ -76,14 +76,6 @@ Key settings in `configs/config.yaml`:
 - [Mechanical Guide](hardware/mechanical/README.md)
 - [3D Printing](hardware/3d_printing/README.md)
 
-## Verification
-
-The repo includes lightweight smoke tests:
-
-```bash
-pytest -q
-```
-
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
