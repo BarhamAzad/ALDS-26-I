@@ -1,231 +1,432 @@
-"""Main entry point for ALDS"""
+"""Main entry point for ALDS object detection, depth, and servo targeting."""
+
+from __future__ import annotations
 
 import argparse
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+os.environ.setdefault("YOLO_CONFIG_DIR", str(Path(".ultralytics").resolve()))
+
 import cv2
 import numpy as np
-from pathlib import Path
+import yaml
+from ultralytics import YOLO
 
-from src.utils.config_loader import load_config
-from src.utils.video_handler import VideoHandler, VideoWriter
-from src.detection.detector import ObjectDetector
-from src.depth_estimation.depth_estimator import DepthEstimator
-from src.laser_control.laser_controller import LaserController
+from depth_estimator import DepthEstimator
+
+
+class ObjectDetector:
+    """Small YOLO wrapper that returns normalized detection dictionaries."""
+
+    def __init__(
+        self,
+        model_path: str,
+        confidence_threshold: float = 0.5,
+        iou_threshold: float = 0.45,
+        classes: list[str] | None = None,
+    ) -> None:
+        self.model_path = Path(model_path)
+        self.confidence_threshold = confidence_threshold
+        self.iou_threshold = iou_threshold
+        self.allowed_classes = {label.lower() for label in classes or []}
+        self.model: YOLO | None = None
+        self.names: dict[int, str] = {}
+        self.is_ready = False
+        self.error: str | None = None
+        self.load()
+
+    def load(self) -> bool:
+        if not self.model_path.exists():
+            self.error = f"YOLO model not found: {self.model_path}"
+            return False
+
+        try:
+            self.model = YOLO(str(self.model_path))
+            names = self.model.names or {}
+            self.names = {int(key): str(value) for key, value in names.items()}
+            self.is_ready = True
+            self.error = None
+        except Exception as exc:  # noqa: BLE001 - keep startup errors clear.
+            self.is_ready = False
+            self.error = str(exc)
+
+        return self.is_ready
+
+    @staticmethod
+    def _logical_label(label: str) -> str:
+        label = label.strip().lower()
+        return "human" if label == "person" else label
+
+    def detect(self, frame: np.ndarray) -> list[dict[str, Any]]:
+        if not self.is_ready or self.model is None:
+            return []
+
+        result = self.model.predict(
+            frame,
+            conf=self.confidence_threshold,
+            iou=self.iou_threshold,
+            verbose=False,
+        )[0]
+
+        detections: list[dict[str, Any]] = []
+        for box in result.boxes:
+            class_id = int(box.cls[0])
+            raw_label = self.names.get(class_id, str(class_id))
+            label = self._logical_label(raw_label)
+
+            if self.allowed_classes and label not in self.allowed_classes:
+                continue
+
+            detections.append(
+                {
+                    "bbox": box.xyxy[0].detach().cpu().numpy().astype(np.float32),
+                    "confidence": float(box.conf[0]),
+                    "label": label,
+                    "raw_label": raw_label,
+                    "class_id": class_id,
+                }
+            )
+
+        return detections
+
+    @staticmethod
+    def draw(frame: np.ndarray, detections: list[dict[str, Any]]) -> np.ndarray:
+        colors = {
+            "human": (0, 220, 0),
+            "zombie": (0, 0, 255),
+        }
+
+        for detection in detections:
+            bbox = detection["bbox"].astype(int)
+            label = detection["label"]
+            confidence = detection["confidence"]
+            color = colors.get(label, (255, 180, 0))
+
+            cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
+            cv2.putText(
+                frame,
+                f"{label} {confidence:.2f}",
+                (bbox[0], max(20, bbox[1] - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                color,
+                2,
+            )
+
+        return frame
+
+
+class LaserController:
+    """Serial controller for the Arduino pan/tilt sketch."""
+
+    def __init__(self, port: str, baud_rate: int = 9600) -> None:
+        self.port = port
+        self.baud_rate = baud_rate
+        self.serial_conn: Any = None
+        self.is_connected = False
+
+    def connect(self) -> bool:
+        try:
+            import serial
+
+            self.serial_conn = serial.Serial(self.port, self.baud_rate, timeout=1)
+            time.sleep(2.0)
+            self.is_connected = True
+        except Exception as exc:  # noqa: BLE001 - serial availability varies.
+            self.is_connected = False
+            print(f"Warning: could not connect to laser controller: {exc}")
+
+        return self.is_connected
+
+    def send(self, command: str) -> None:
+        if not self.is_connected or self.serial_conn is None:
+            return
+        self.serial_conn.write(f"{command}\n".encode("utf-8"))
+
+    def target_bbox(self, bbox: np.ndarray, frame_shape: tuple[int, ...]) -> tuple[float, float]:
+        height, width = frame_shape[:2]
+        x1, y1, x2, y2 = bbox.astype(float)
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+
+        pan = 90.0 + ((cx - width / 2.0) / (width / 2.0)) * 90.0
+        tilt = 90.0 + ((cy - height / 2.0) / (height / 2.0)) * 90.0
+        pan = float(np.clip(pan, 0.0, 180.0))
+        tilt = float(np.clip(tilt, 0.0, 180.0))
+
+        self.send(f"PAN:{pan:.1f},TILT:{tilt:.1f}")
+        return pan, tilt
+
+    def fire(self) -> None:
+        self.send("FIRE:ON")
+
+    def cease_fire(self) -> None:
+        self.send("FIRE:OFF")
+
+    def disconnect(self) -> None:
+        if self.is_connected:
+            self.cease_fire()
+        if self.serial_conn is not None:
+            self.serial_conn.close()
+        self.is_connected = False
+
+
+class VideoWriter:
+    """OpenCV video writer with lazy output directory creation."""
+
+    def __init__(self, output_path: str, fps: int, width: int, height: int) -> None:
+        self.output_path = Path(output_path)
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self.writer: cv2.VideoWriter | None = None
+
+    def open(self) -> bool:
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        self.writer = cv2.VideoWriter(
+            str(self.output_path),
+            fourcc,
+            self.fps,
+            (self.width, self.height),
+        )
+        return bool(self.writer.isOpened())
+
+    def write(self, frame: np.ndarray) -> None:
+        if self.writer is not None:
+            self.writer.write(frame)
+
+    def release(self) -> None:
+        if self.writer is not None:
+            self.writer.release()
 
 
 class ALDS:
-    """Main system for zombie detection and laser targeting"""
-    
-    def __init__(self, config_path: str):
-        """
-        Initialize the system
-        
-        Args:
-            config_path: Path to configuration file
-        """
-        self.config = load_config(config_path)
-        
-        # Initialize modules
+    """Object detection + depth ranking + optional Arduino servo aiming."""
+
+    def __init__(self, config_path: str) -> None:
+        self.config = self._load_config(config_path)
+        detection_config = self.config["detection"]
+        depth_config = self.config["depth"]
+        laser_config = self.config["laser"]
+
         self.detector = ObjectDetector(
-            self.config["detection"]["model"],
-            self.config["detection"]["confidence_threshold"],
-            self.config["detection"].get("classes"),
+            model_path=detection_config["model"],
+            confidence_threshold=float(detection_config.get("confidence_threshold", 0.5)),
+            iou_threshold=float(detection_config.get("iou_threshold", 0.45)),
+            classes=detection_config.get("classes"),
         )
-        
         self.depth_estimator = DepthEstimator(
-            model_type=self.config["depth"]["encoder"],
-            device=self.config["depth"]["device"]
+            model_type=str(depth_config.get("encoder", "vits")),
+            device=str(depth_config.get("device", "auto")),
+            input_size=int(depth_config.get("input_size", 518)),
         )
-        
         self.laser_controller = LaserController(
-            port=self.config["laser"]["port"],
-            baud_rate=self.config["laser"]["baud_rate"]
+            port=str(laser_config.get("port", "/dev/ttyUSB0")),
+            baud_rate=int(laser_config.get("baud_rate", 9600)),
         )
-        self.target_class = str(self.config["laser"].get("target_class", "zombie")).lower()
-        
-        self.video_handler = VideoHandler(
-            source=self.config["video"]["source"],
-            fps=self.config["video"]["fps"],
-            width=self.config["video"]["width"],
-            height=self.config["video"]["height"]
-        )
-        
-        self.video_writer = None
-        if self.config["output"]["save_video"]:
-            output_path = Path(self.config["output"]["results_dir"]) / "output.mp4"
-            self.video_writer = VideoWriter(
-                str(output_path),
-                fps=self.config["video"]["fps"],
-                width=self.config["video"]["width"],
-                height=self.config["video"]["height"]
-            )
-    
+        self.target_class = str(laser_config.get("target_class", "zombie")).lower()
+        self.laser_enabled = bool(laser_config.get("enabled", False))
+        self.auto_fire = bool(laser_config.get("auto_fire", False))
+        self.video_writer: VideoWriter | None = None
+
     @staticmethod
-    def _label_key(label: str) -> str:
-        if label == "human":
-            return "humans"
-        if label.endswith("y"):
-            return f"{label[:-1]}ies"
-        return f"{label}s"
+    def _load_config(config_path: str) -> dict[str, Any]:
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            return yaml.safe_load(config_file)
 
-    def find_closest_target(self, detections: dict, depths: np.ndarray) -> dict | None:
+    def _open_video(self) -> cv2.VideoCapture:
+        video_config = self.config["video"]
+        source = video_config.get("source", 0)
+        cap = cv2.VideoCapture(source)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(video_config.get("width", 640)))
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(video_config.get("height", 480)))
+        cap.set(cv2.CAP_PROP_FPS, int(video_config.get("fps", 30)))
+        return cap
+
+    def _open_writer(self) -> None:
+        output_config = self.config["output"]
+        if not output_config.get("save_video", False):
+            return
+
+        video_config = self.config["video"]
+        output_path = Path(output_config.get("results_dir", "results")) / "output.mp4"
+        self.video_writer = VideoWriter(
+            str(output_path),
+            fps=int(video_config.get("fps", 30)),
+            width=int(video_config.get("width", 640)),
+            height=int(video_config.get("height", 480)),
+        )
+        if not self.video_writer.open():
+            print("Warning: could not open output video writer")
+            self.video_writer = None
+
+    def find_nearest_target(
+        self,
+        detections: list[dict[str, Any]],
+        depth: np.ndarray,
+        frame_shape: tuple[int, ...],
+    ) -> dict[str, Any] | None:
+        """Select the nearest configured target.
+
+        With Depth Anything available, the highest median normalized depth value
+        in the box is treated as closest. Without depth, larger boxes are used
+        as a practical fallback because nearby objects usually occupy more area.
         """
-        Find the closest configured target that should be tracked.
-        
-        Args:
-            detections: Detection results
-            depths: Depth map
-            
-        Returns:
-            Closest target info or None
-        """
+        candidates = [
+            detection
+            for detection in detections
+            if detection["label"].lower() == self.target_class
+        ]
+        if not candidates:
+            candidates = detections
+        if not candidates:
+            return None
+
+        best_target = None
+        best_score = -1.0
+        frame_area = float(frame_shape[0] * frame_shape[1])
+        min_depth = float(self.config["laser"].get("min_distance", 0.0))
+        max_depth = float(self.config["laser"].get("max_distance", 1.0))
+
+        for detection in candidates:
+            bbox = detection["bbox"]
+            if self.depth_estimator.is_ready:
+                score = self.depth_estimator.get_bbox_depth(depth, bbox)
+                if not min_depth <= score <= max_depth:
+                    continue
+            else:
+                x1, y1, x2, y2 = bbox
+                score = max(0.0, ((x2 - x1) * (y2 - y1)) / frame_area)
+
+            if score > best_score:
+                best_score = score
+                best_target = {**detection, "depth_score": score}
+
+        return best_target
+
+    @staticmethod
+    def draw_target(frame: np.ndarray, target: dict[str, Any], pan_tilt: tuple[float, float] | None) -> None:
+        bbox = target["bbox"].astype(int)
+        cx = int((bbox[0] + bbox[2]) / 2)
+        cy = int((bbox[1] + bbox[3]) / 2)
+        cv2.circle(frame, (cx, cy), 30, (0, 0, 255), 2)
+        cv2.line(frame, (cx - 45, cy), (cx + 45, cy), (0, 0, 255), 1)
+        cv2.line(frame, (cx, cy - 45), (cx, cy + 45), (0, 0, 255), 1)
+
+        aim_text = ""
+        if pan_tilt is not None:
+            aim_text = f" PAN:{pan_tilt[0]:.0f} TILT:{pan_tilt[1]:.0f}"
+        cv2.putText(
+            frame,
+            f"TARGET {target['label'].upper()} D:{target['depth_score']:.2f}{aim_text}",
+            (bbox[0], max(20, bbox[1] - 28)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.58,
+            (0, 0, 255),
+            2,
+        )
+
+    def draw_status(self, frame: np.ndarray, detections: list[dict[str, Any]]) -> None:
+        human_count = sum(1 for item in detections if item["label"] == "human")
+        target_count = sum(1 for item in detections if item["label"] == self.target_class)
+        lines = [
+            f"Humans: {human_count}",
+            f"{self.target_class.title()}s: {target_count}",
+        ]
+
+        if not self.detector.is_ready:
+            lines.append(f"Detector unavailable: {self.detector.error}")
         if not self.depth_estimator.is_ready:
-            return None
+            lines.append("Depth unavailable: using bbox-size fallback")
+        if self.laser_enabled and not self.laser_controller.is_connected:
+            lines.append("Laser controller offline")
+        if self.laser_enabled and not self.auto_fire:
+            lines.append("Servo aiming enabled; auto fire off")
 
-        target_key = self._label_key(self.target_class)
-        targets = detections.get(target_key, [])
-        if not targets:
-            return None
+        for index, line in enumerate(lines):
+            cv2.putText(
+                frame,
+                line[:90],
+                (10, 30 + index * 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.62,
+                (0, 215, 255),
+                2,
+            )
 
-        min_distance = float("inf")
-        closest_target = None
-
-        for target in targets:
-            bbox = target["bbox"].astype(int)
-            cx = (bbox[0] + bbox[2]) // 2
-            cy = (bbox[1] + bbox[3]) // 2
-
-            depth = self.depth_estimator.get_depth_at_point(depths, cx, cy)
-            if self.config["laser"]["min_distance"] <= depth <= self.config["laser"]["max_distance"]:
-                if depth < min_distance:
-                    min_distance = depth
-                    closest_target = {
-                        "bbox": bbox,
-                        "depth": depth,
-                        "confidence": target["confidence"],
-                        "label": target["label"],
-                    }
-
-        return closest_target
-    
-    def run(self):
-        """Run the main detection loop"""
-        if not self.video_handler.open():
+    def run(self) -> None:
+        cap = self._open_video()
+        if not cap.isOpened():
             print("Failed to open video source")
             return
-        
-        if self.config["laser"]["enabled"]:
-            if not self.laser_controller.connect():
-                print("Warning: Could not connect to laser controller")
-        
-        if self.config["output"]["save_video"] and self.video_writer:
-            if not self.video_writer.open():
-                print("Warning: Could not open video writer")
-                self.video_writer = None
-        
+
+        if self.laser_enabled:
+            self.laser_controller.connect()
+        self._open_writer()
+
         try:
             while True:
-                ret, frame = self.video_handler.read_frame()
-                if not ret:
+                ok, frame = cap.read()
+                if not ok:
                     break
-                
-                # Flip frame if configured
-                if self.config["video"]["flip_horizontal"]:
+
+                if self.config["video"].get("flip_horizontal", False):
                     frame = cv2.flip(frame, 1)
-                
-                # Detect objects
+
                 detections = self.detector.detect(frame)
-                
-                # Estimate depth
                 depth = self.depth_estimator.estimate_depth(frame)
-                
-                # Display frame
                 output_frame = frame.copy()
-                
-                if self.config["output"]["draw_bbox"]:
-                    output_frame = self.detector.draw_detections(output_frame, detections)
-                
-                if self.config["output"]["draw_depth"]:
+
+                if self.config["output"].get("draw_depth", True) and self.depth_estimator.is_ready:
                     depth_vis = self.depth_estimator.visualize_depth(depth)
-                    # Blend depth visualization
-                    output_frame = cv2.addWeighted(output_frame, 0.7, depth_vis, 0.3, 0)
-                
-                # Find and target closest zombie
-                closest_target = self.find_closest_target(detections, depth)
+                    output_frame = cv2.addWeighted(output_frame, 0.72, depth_vis, 0.28, 0)
 
-                if closest_target and self.config["laser"]["enabled"]:
-                    bbox = closest_target["bbox"]
-                    self.laser_controller.target_bbox(bbox, frame.shape)
-                    self.laser_controller.fire()
+                if self.config["output"].get("draw_bbox", True):
+                    output_frame = self.detector.draw(output_frame, detections)
 
-                    # Draw targeting reticle
-                    cx = (bbox[0] + bbox[2]) // 2
-                    cy = (bbox[1] + bbox[3]) // 2
-                    cv2.circle(output_frame, (cx, cy), 30, (0, 0, 255), 2)
-                    cv2.putText(
-                        output_frame,
-                        f"TARGET {closest_target['label'].upper()}: {closest_target['depth']:.2f}",
-                        (bbox[0], bbox[1] - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 0, 255),
-                        2,
-                    )
-                else:
-                    if self.config["laser"]["enabled"]:
-                        self.laser_controller.cease_fire()
+                target = self.find_nearest_target(detections, depth, frame.shape)
+                pan_tilt = None
+                if target is not None:
+                    if self.laser_enabled and self.laser_controller.is_connected:
+                        pan_tilt = self.laser_controller.target_bbox(target["bbox"], frame.shape)
+                        if self.auto_fire:
+                            self.laser_controller.fire()
+                        else:
+                            self.laser_controller.cease_fire()
+                    self.draw_target(output_frame, target, pan_tilt)
+                elif self.laser_enabled:
+                    self.laser_controller.cease_fire()
 
-                # Add UI information
-                human_count = len(detections.get("humans", []))
-                target_count = len(detections.get(self._label_key(self.target_class), []))
-                cv2.putText(output_frame, f"Humans: {human_count}",
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(output_frame, f"{self.target_class.title()}s: {target_count}",
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-                if not self.detector.is_ready:
-                    cv2.putText(output_frame, "Detector unavailable", (10, 90),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
-                if not self.depth_estimator.is_ready:
-                    cv2.putText(output_frame, "Depth unavailable", (10, 120),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
-                if self.config["laser"]["enabled"] and not self.laser_controller.is_connected:
-                    cv2.putText(output_frame, "Laser controller offline", (10, 150),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
-
-                # Display
+                self.draw_status(output_frame, detections)
                 cv2.imshow("ALDS", output_frame)
-                
-                # Save video
-                if self.video_writer:
-                    self.video_writer.write_frame(output_frame)
-                
-                # Exit on 'q'
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+
+                if self.video_writer is not None:
+                    self.video_writer.write(output_frame)
+
+                if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
-        
         finally:
-            self.cleanup()
-    
-    def cleanup(self):
-        """Clean up resources"""
-        self.video_handler.release()
-        if self.video_writer:
-            self.video_writer.release()
-        if self.config["laser"]["enabled"]:
-            self.laser_controller.cease_fire()
+            cap.release()
+            if self.video_writer is not None:
+                self.video_writer.release()
             self.laser_controller.disconnect()
-        cv2.destroyAllWindows()
+            cv2.destroyAllWindows()
 
 
-def main():
-    """Main function"""
+def main() -> None:
     parser = argparse.ArgumentParser(description="ALDS")
-    parser.add_argument("--config", type=str, default="configs/config.yaml",
-                       help="Path to configuration file")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/config.yaml",
+        help="Path to configuration file",
+    )
     args = parser.parse_args()
-    
-    system = ALDS(args.config)
-    system.run()
+    ALDS(args.config).run()
 
 
 if __name__ == "__main__":
