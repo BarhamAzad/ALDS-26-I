@@ -2,7 +2,7 @@
 
 # YOLO26 Detection Settings
 detection:
-  model: runs/detect/runs/detect/yolo26s_human_zombie_finetune/weights/best.pt
+  model: runs/detect/runs/detect/yolo26s_human_zombie_finetune_afterlife/weights/best.pt
   confidence_threshold: 0.5
   iou_threshold: 0.45
   classes:  # Classes to detect
@@ -11,10 +11,12 @@ detection:
 
 # Depth Estimation Settings
 depth:
+  enabled: true
   model: depth_anything_v2
   encoder: vits  # vits, vitb, vitl
   device: auto  # auto, cuda, or cpu
-  input_size: 518
+  input_size: 256
+  update_interval: 8  # Estimate depth every N frames for faster live preview
 
 # Laser Control Settings
 laser:

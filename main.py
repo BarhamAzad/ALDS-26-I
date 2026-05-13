@@ -212,6 +212,8 @@ class ALDS:
         detection_config = self.config["detection"]
         depth_config = self.config["depth"]
         laser_config = self.config["laser"]
+        self.depth_enabled = bool(depth_config.get("enabled", True))
+        self.depth_update_interval = max(1, int(depth_config.get("update_interval", 1)))
 
         self.detector = ObjectDetector(
             model_path=detection_config["model"],
@@ -223,6 +225,7 @@ class ALDS:
             model_type=str(depth_config.get("encoder", "vits")),
             device=str(depth_config.get("device", "auto")),
             input_size=int(depth_config.get("input_size", 518)),
+            initialize=self.depth_enabled,
         )
         self.laser_controller = LaserController(
             port=str(laser_config.get("port", "/dev/ttyUSB0")),
@@ -242,9 +245,9 @@ class ALDS:
         video_config = self.config["video"]
         source = video_config.get("source", 0)
         cap = cv2.VideoCapture(source)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(video_config.get("width", 640)))
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(video_config.get("height", 480)))
-        cap.set(cv2.CAP_PROP_FPS, int(video_config.get("fps", 30)))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(video_config.get("width", 800)))
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(video_config.get("height", 600)))
+        cap.set(cv2.CAP_PROP_FPS, int(video_config.get("fps", 60)))
         return cap
 
     def _open_writer(self) -> None:
@@ -256,9 +259,9 @@ class ALDS:
         output_path = Path(output_config.get("results_dir", "results")) / "output.mp4"
         self.video_writer = VideoWriter(
             str(output_path),
-            fps=int(video_config.get("fps", 30)),
-            width=int(video_config.get("width", 640)),
-            height=int(video_config.get("height", 480)),
+            fps=int(video_config.get("fps", 60)),
+            width=int(video_config.get("width", 800)),
+            height=int(video_config.get("height", 600)),
         )
         if not self.video_writer.open():
             print("Warning: could not open output video writer")
@@ -340,7 +343,9 @@ class ALDS:
 
         if not self.detector.is_ready:
             lines.append(f"Detector unavailable: {self.detector.error}")
-        if not self.depth_estimator.is_ready:
+        if not self.depth_enabled:
+            lines.append("Depth disabled: using bbox-size fallback")
+        elif not self.depth_estimator.is_ready:
             lines.append("Depth unavailable: using bbox-size fallback")
         if self.laser_enabled and not self.laser_controller.is_connected:
             lines.append("Laser controller offline")
@@ -368,6 +373,9 @@ class ALDS:
             self.laser_controller.connect()
         self._open_writer()
 
+        frame_index = 0
+        last_depth: np.ndarray | None = None
+
         try:
             while True:
                 ok, frame = cap.read()
@@ -378,7 +386,13 @@ class ALDS:
                     frame = cv2.flip(frame, 1)
 
                 detections = self.detector.detect(frame)
-                depth = self.depth_estimator.estimate_depth(frame)
+                if self.depth_enabled:
+                    should_update_depth = frame_index % self.depth_update_interval == 0 or last_depth is None
+                    if should_update_depth:
+                        last_depth = self.depth_estimator.estimate_depth(frame)
+                    depth = last_depth
+                else:
+                    depth = np.zeros(frame.shape[:2], dtype=np.float32)
                 output_frame = frame.copy()
 
                 if self.config["output"].get("draw_depth", True) and self.depth_estimator.is_ready:
@@ -409,6 +423,8 @@ class ALDS:
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
+
+                frame_index += 1
         finally:
             cap.release()
             if self.video_writer is not None:

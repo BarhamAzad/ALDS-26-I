@@ -6,6 +6,7 @@ data/processed/yolo_dataset/labels/
 models/*.pt
 models/*.onnx
 results/*
+runs/
 *.mp4
 *.avi
 
@@ -39,4 +40,5 @@ logs/
 # Cache
 .pytest_cache/
 .ultralytics/
+*.cache
 .coverage

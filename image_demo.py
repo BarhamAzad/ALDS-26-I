@@ -6,10 +6,16 @@ import argparse
 from pathlib import Path
 
 import cv2
+import yaml
 
-from src.depth_estimation.depth_estimator import DepthEstimator
-from src.detection.detector import ObjectDetector
-from src.utils.config_loader import load_config
+from depth_estimator import DepthEstimator
+from main import ObjectDetector
+
+
+def load_config(config_path: str):
+    """Load the YAML runtime config."""
+    with open(config_path, "r", encoding="utf-8") as config_file:
+        return yaml.safe_load(config_file)
 
 
 def run_image_demo(image_path: str, config_path: str = "configs/config.yaml", display: bool = True):
@@ -26,24 +32,30 @@ def run_image_demo(image_path: str, config_path: str = "configs/config.yaml", di
         return 1
 
     detector = ObjectDetector(
-        config["detection"]["model"],
-        config["detection"]["confidence_threshold"],
-        config["detection"].get("classes"),
+        model_path=config["detection"]["model"],
+        confidence_threshold=config["detection"]["confidence_threshold"],
+        iou_threshold=config["detection"].get("iou_threshold", 0.45),
+        classes=config["detection"].get("classes"),
     )
     depth_estimator = DepthEstimator(
         model_type=config["depth"]["encoder"],
         device=config["depth"]["device"],
+        input_size=int(config["depth"].get("input_size", 518)),
+        initialize=bool(config["depth"].get("enabled", True)),
     )
 
     detections = detector.detect(frame)
     depth = depth_estimator.estimate_depth(frame)
 
-    output_frame = detector.draw_detections(frame, detections)
+    output_frame = detector.draw(frame.copy(), detections)
     depth_vis = depth_estimator.visualize_depth(depth)
 
-    cv2.putText(output_frame, f"Humans: {len(detections.get('humans', []))}",
+    human_count = sum(1 for detection in detections if detection["label"] == "human")
+    zombie_count = sum(1 for detection in detections if detection["label"] == "zombie")
+
+    cv2.putText(output_frame, f"Humans: {human_count}",
                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-    cv2.putText(output_frame, f"Zombies: {len(detections.get('zombies', []))}",
+    cv2.putText(output_frame, f"Zombies: {zombie_count}",
                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
     output_dir = Path("results")
@@ -51,8 +63,8 @@ def run_image_demo(image_path: str, config_path: str = "configs/config.yaml", di
     cv2.imwrite(str(output_dir / "detection.jpg"), output_frame)
     cv2.imwrite(str(output_dir / "depth.jpg"), depth_vis)
 
-    print(f"Humans detected: {len(detections.get('humans', []))}")
-    print(f"Zombies detected: {len(detections.get('zombies', []))}")
+    print(f"Humans detected: {human_count}")
+    print(f"Zombies detected: {zombie_count}")
     print(f"Depth available: {depth_estimator.is_ready}")
     print(f"Detection available: {detector.is_ready}")
     print(f"Results saved to {output_dir}/")
