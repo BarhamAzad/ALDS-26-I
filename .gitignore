@@ -40,5 +40,6 @@ logs/
 # Cache
 .pytest_cache/
 .ultralytics/
+.matplotlib/
 *.cache
 .coverage

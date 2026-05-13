@@ -67,7 +67,9 @@ STATUS               # Get current status
 2. Connect components according to wiring diagram
 3. Power Arduino (9V or USB)
 4. Connect USB to computer for serial communication
-5. Python script will communicate at `/dev/ttyUSB0` or `COM3` (Windows)
+5. Set `laser.port` in `configs/config.yaml` for your OS, for example `/dev/ttyUSB0`, `/dev/tty.usbserial*`, or `COM3`
+6. Keep `laser.enabled: false` until manual serial testing succeeds
+7. Keep `laser.auto_fire: false` for aiming-only runs
 
 ## Testing
 
@@ -78,3 +80,15 @@ FIRE:ON
 FIRE:OFF
 STATUS
 ```
+
+When the serial test works, run the Python app with `laser.enabled: true`. With `auto_fire: false`, the app sends pan/tilt aiming commands and explicit `FIRE:OFF` commands without firing.
+
+## Integration Log
+
+For the project report and presentation, record:
+
+- Arduino board model and serial port.
+- Servo model and power source.
+- Camera model and mounting position.
+- Commands tested manually.
+- Any missed commands, jitter, power issues, or calibration offsets.

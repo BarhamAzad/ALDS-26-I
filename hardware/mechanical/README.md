@@ -21,11 +21,21 @@ This guide covers the current physical assumptions used by the software and firm
 
 - The Python side assumes the left edge of the image maps toward lower pan angles.
 - The Python side assumes the top edge of the image maps toward lower tilt angles.
-- If your mechanism is reversed on either axis, swap the linkage mechanically or invert the mapping in `src/laser_control/laser_controller.py`.
+- If your mechanism is reversed on either axis, swap the linkage mechanically or invert the mapping in `LaserController.target_bbox` in `main.py`.
 - Fine aiming should be done with hardware disabled first.
+- Record the camera resolution, servo center position, and any mechanical offsets used during the final demo.
+
+## Demo Procedure
+
+1. Run software-only detection with `laser.enabled: false`.
+2. Center the servos with `PAN:90,TILT:90`.
+3. Enable hardware with `laser.enabled: true` and `laser.auto_fire: false`.
+4. Verify pan/tilt tracking with a safe indicator instead of an active laser.
+5. Capture calibration notes and any alignment error for the final report.
 
 ## Safety
 
 - Keep `laser.enabled: false` until servo motion and serial communication are confirmed.
+- Keep `laser.auto_fire: false` while validating pan/tilt alignment.
 - Test with the laser disconnected or replaced by a harmless indicator LED first.
 - Do not energize the relay output until the mechanism has been dry-run successfully.

@@ -120,6 +120,12 @@ No slicing profiles are committed yet. Add your own slicer profile locally for y
 
 See `../mechanical/README.md` for assembly notes and calibration guidance.
 
+## Project Documentation Notes
+
+- Photograph the printed base and final mount if used in the demo.
+- Record material, infill, layer height, and any print failures.
+- Note whether the final demo used the printed part, a temporary mount, or a benchtop test fixture.
+
 ## Estimated Project Cost
 
 | Item | Est. Cost |
@@ -130,7 +136,6 @@ See `../mechanical/README.md` for assembly notes and calibration guidance.
 | Laser Module | $5 |
 | Relay Module | $3 |
 | Camera (USB) | $10-20 |
-| Depth Sensor (optional) | $50-150 |
-| **Total** | **$92-193** |
+| **Total** | **$42-53** |
 
 *Prices vary by supplier and region*
