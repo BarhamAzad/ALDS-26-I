@@ -25,8 +25,21 @@ laser:
   port: /dev/ttyUSB0  # Serial port for laser control
   baud_rate: 9600
   target_class: zombie  # Only target zombies, exclude humans
+  fallback_to_any_detection: false
   min_distance: 0.05    # Minimum relative depth value (0..1)
   max_distance: 0.95    # Maximum relative depth value (0..1)
+  pan_start: 90
+  tilt_start: 90
+  pan_min: 0
+  pan_max: 180
+  tilt_min: 0
+  tilt_max: 180
+  pan_gain: 6.0         # Degrees to correct when target is at frame edge
+  tilt_gain: 6.0        # Degrees to correct when target is at frame edge
+  deadband_px: 20       # Do not move when target is close enough to center
+  command_interval: 0.05
+  invert_pan: false     # Flip if the pan axis moves away from the target
+  invert_tilt: false    # Flip if the tilt axis moves away from the target
 
 # Video Input Settings
 video:

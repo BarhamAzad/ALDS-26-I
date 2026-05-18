@@ -122,11 +122,40 @@ class ObjectDetector:
 class LaserController:
     """Serial controller for the Arduino pan/tilt sketch."""
 
-    def __init__(self, port: str, baud_rate: int = 9600) -> None:
+    def __init__(
+        self,
+        port: str,
+        baud_rate: int = 9600,
+        pan_start: float = 90.0,
+        tilt_start: float = 90.0,
+        pan_min: float = 0.0,
+        pan_max: float = 180.0,
+        tilt_min: float = 0.0,
+        tilt_max: float = 180.0,
+        pan_gain: float = 6.0,
+        tilt_gain: float = 6.0,
+        deadband_px: int = 20,
+        command_interval: float = 0.05,
+        invert_pan: bool = False,
+        invert_tilt: bool = False,
+    ) -> None:
         self.port = port
         self.baud_rate = baud_rate
         self.serial_conn: Any = None
         self.is_connected = False
+        self.current_pan = float(np.clip(pan_start, pan_min, pan_max))
+        self.current_tilt = float(np.clip(tilt_start, tilt_min, tilt_max))
+        self.pan_min = pan_min
+        self.pan_max = pan_max
+        self.tilt_min = tilt_min
+        self.tilt_max = tilt_max
+        self.pan_gain = pan_gain
+        self.tilt_gain = tilt_gain
+        self.deadband_px = max(0, deadband_px)
+        self.command_interval = max(0.0, command_interval)
+        self.invert_pan = invert_pan
+        self.invert_tilt = invert_tilt
+        self._last_command_time = 0.0
 
     def connect(self) -> bool:
         try:
@@ -135,6 +164,7 @@ class LaserController:
             self.serial_conn = serial.Serial(self.port, self.baud_rate, timeout=1)
             time.sleep(2.0)
             self.is_connected = True
+            self.move_to(self.current_pan, self.current_tilt, force=True)
         except Exception as exc:  # noqa: BLE001 - serial availability varies.
             self.is_connected = False
             print(f"Warning: could not connect to laser controller: {exc}")
@@ -146,19 +176,42 @@ class LaserController:
             return
         self.serial_conn.write(f"{command}\n".encode("utf-8"))
 
+    def move_to(self, pan: float, tilt: float, force: bool = False) -> tuple[float, float]:
+        now = time.monotonic()
+        if not force and now - self._last_command_time < self.command_interval:
+            return self.current_pan, self.current_tilt
+
+        self.current_pan = float(np.clip(pan, self.pan_min, self.pan_max))
+        self.current_tilt = float(np.clip(tilt, self.tilt_min, self.tilt_max))
+        self.send(f"PAN:{self.current_pan:.1f},TILT:{self.current_tilt:.1f}")
+        self._last_command_time = now
+        return self.current_pan, self.current_tilt
+
     def target_bbox(self, bbox: np.ndarray, frame_shape: tuple[int, ...]) -> tuple[float, float]:
         height, width = frame_shape[:2]
         x1, y1, x2, y2 = bbox.astype(float)
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
 
-        pan = 90.0 + ((cx - width / 2.0) / (width / 2.0)) * 90.0
-        tilt = 90.0 + ((cy - height / 2.0) / (height / 2.0)) * 90.0
-        pan = float(np.clip(pan, 0.0, 180.0))
-        tilt = float(np.clip(tilt, 0.0, 180.0))
+        error_x = cx - width / 2.0
+        error_y = cy - height / 2.0
+        pan_delta = 0.0
+        tilt_delta = 0.0
 
-        self.send(f"PAN:{pan:.1f},TILT:{tilt:.1f}")
-        return pan, tilt
+        if abs(error_x) > self.deadband_px:
+            pan_delta = (error_x / (width / 2.0)) * self.pan_gain
+        if abs(error_y) > self.deadband_px:
+            tilt_delta = (error_y / (height / 2.0)) * self.tilt_gain
+
+        if self.invert_pan:
+            pan_delta *= -1.0
+        if self.invert_tilt:
+            tilt_delta *= -1.0
+
+        if pan_delta == 0.0 and tilt_delta == 0.0:
+            return self.current_pan, self.current_tilt
+
+        return self.move_to(self.current_pan + pan_delta, self.current_tilt + tilt_delta)
 
     def fire(self) -> None:
         self.send("FIRE:ON")
@@ -230,8 +283,21 @@ class ALDS:
         self.laser_controller = LaserController(
             port=str(laser_config.get("port", "/dev/ttyUSB0")),
             baud_rate=int(laser_config.get("baud_rate", 9600)),
+            pan_start=float(laser_config.get("pan_start", 90.0)),
+            tilt_start=float(laser_config.get("tilt_start", 90.0)),
+            pan_min=float(laser_config.get("pan_min", 0.0)),
+            pan_max=float(laser_config.get("pan_max", 180.0)),
+            tilt_min=float(laser_config.get("tilt_min", 0.0)),
+            tilt_max=float(laser_config.get("tilt_max", 180.0)),
+            pan_gain=float(laser_config.get("pan_gain", 6.0)),
+            tilt_gain=float(laser_config.get("tilt_gain", 6.0)),
+            deadband_px=int(laser_config.get("deadband_px", 20)),
+            command_interval=float(laser_config.get("command_interval", 0.05)),
+            invert_pan=bool(laser_config.get("invert_pan", False)),
+            invert_tilt=bool(laser_config.get("invert_tilt", False)),
         )
         self.target_class = str(laser_config.get("target_class", "zombie")).lower()
+        self.fallback_to_any_detection = bool(laser_config.get("fallback_to_any_detection", False))
         self.laser_enabled = bool(laser_config.get("enabled", False))
         self.auto_fire = bool(laser_config.get("auto_fire", False))
         self.video_writer: VideoWriter | None = None
@@ -279,13 +345,16 @@ class ALDS:
         in the box is treated as closest. Without depth, larger boxes are used
         as a practical fallback because nearby objects usually occupy more area.
         """
-        candidates = [
-            detection
-            for detection in detections
-            if detection["label"].lower() == self.target_class
-        ]
-        if not candidates:
+        if self.target_class in {"any", "all", "*"}:
             candidates = detections
+        else:
+            candidates = [
+                detection
+                for detection in detections
+                if detection["label"].lower() == self.target_class
+            ]
+            if not candidates and self.fallback_to_any_detection:
+                candidates = detections
         if not candidates:
             return None
 
@@ -335,10 +404,15 @@ class ALDS:
 
     def draw_status(self, frame: np.ndarray, detections: list[dict[str, Any]]) -> None:
         human_count = sum(1 for item in detections if item["label"] == "human")
-        target_count = sum(1 for item in detections if item["label"] == self.target_class)
+        if self.target_class in {"any", "all", "*"}:
+            target_count = len(detections)
+            target_label = "Targets"
+        else:
+            target_count = sum(1 for item in detections if item["label"] == self.target_class)
+            target_label = f"{self.target_class.title()}s"
         lines = [
             f"Humans: {human_count}",
-            f"{self.target_class.title()}s: {target_count}",
+            f"{target_label}: {target_count}",
         ]
 
         if not self.detector.is_ready:

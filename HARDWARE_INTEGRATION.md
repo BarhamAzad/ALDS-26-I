@@ -48,7 +48,8 @@ For the ENGR 422 project scope, the hardware contribution is the camera-based in
 
 4. **Target Selection** (`main.py`)
    - Finds the closest configured target class within the configured relative-depth range
-   - Falls back to all detections if no configured target class is present
+   - Can target all detections by setting `laser.target_class: any`
+   - Can fall back to all detections with `laser.fallback_to_any_detection: true`
    - Uses bounding-box size as a fallback when depth is disabled or unavailable
    - Calculates servo angles
 
@@ -87,9 +88,18 @@ FIRING
 CEASE_FIRE
 ```
 
-## Angle Conversion
+## Camera-On-Pan/Tilt Tracking
 
-Frame coordinates to servo angles:
+For this build, the camera is expected to be mounted on top of the 2-axis pan/tilt head. That means targeting must be a closed-loop correction:
+
+1. Detect the nearest configured target.
+2. Measure how far the target center is from the image center.
+3. Nudge the current servo angles by a small amount.
+4. Repeat until the target is centered.
+
+This is different from a fixed-camera setup. If the software mapped image coordinates directly to absolute servo angles, the head would tend to jump back toward center after the target becomes centered in the camera view.
+
+Frame error:
 
 ```
 Frame:  (0,0) ─────────── (W,0)
@@ -98,15 +108,18 @@ Frame:  (0,0) ─────────── (W,0)
          │        *        │
          │                 │
         (0,H) ─────────── (W,H)
-
-Servo command space:
-  pan  = 0° .. 180°
-  tilt = 0° .. 180°
-
-Conversion in `LaserController.target_bbox`:
-  pan = 90 + ((cx - w/2) / (w/2)) * 90
-  tilt = 90 + ((cy - h/2) / (h/2)) * 90
 ```
+
+Closed-loop correction in `LaserController.target_bbox`:
+
+```
+error_x = cx - w / 2
+error_y = cy - h / 2
+pan  = current_pan  + normalized(error_x) * pan_gain
+tilt = current_tilt + normalized(error_y) * tilt_gain
+```
+
+Use `laser.invert_pan` or `laser.invert_tilt` if an axis moves away from the target during calibration.
 
 ## Connection Checklist
 
@@ -154,8 +167,14 @@ laser:
   port: /dev/ttyUSB0        # Adjust for your OS
   baud_rate: 9600
   target_class: zombie
+  fallback_to_any_detection: false
   min_distance: 0.05
   max_distance: 0.95
+  pan_gain: 6.0
+  tilt_gain: 6.0
+  deadband_px: 20
+  invert_pan: false
+  invert_tilt: false
 ```
 
 Notes:
@@ -163,6 +182,7 @@ Notes:
 - The default config keeps hardware disabled until the controller has been tested separately.
 - Keep `auto_fire: false` during servo aiming and calibration; set it to `true` only when intentional.
 - If `depth.enabled: false` or the depth model cannot load, targeting uses larger bounding boxes as a practical nearest-object fallback.
+- If the camera moves away from the target, flip the matching `invert_*` setting and test again.
 
 ## Performance Notes
 

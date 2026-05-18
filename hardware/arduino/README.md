@@ -70,6 +70,7 @@ STATUS               # Get current status
 5. Set `laser.port` in `configs/config.yaml` for your OS, for example `/dev/ttyUSB0`, `/dev/tty.usbserial*`, or `COM3`
 6. Keep `laser.enabled: false` until manual serial testing succeeds
 7. Keep `laser.auto_fire: false` for aiming-only runs
+8. If the camera is mounted on the pan/tilt head, tune `laser.pan_gain`, `laser.tilt_gain`, and the `laser.invert_*` settings in small steps
 
 ## Testing
 
@@ -82,6 +83,8 @@ STATUS
 ```
 
 When the serial test works, run the Python app with `laser.enabled: true`. With `auto_fire: false`, the app sends pan/tilt aiming commands and explicit `FIRE:OFF` commands without firing.
+
+For camera-on-head tracking, place an object off-center in the camera view. The servos should move until the object approaches the center of the image. If either axis moves the object farther from center, flip the matching `laser.invert_pan` or `laser.invert_tilt` value.
 
 ## Integration Log
 

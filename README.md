@@ -98,7 +98,10 @@ Key settings in `configs/config.yaml`:
 - `laser.enabled`: set to `true` only after wiring and testing the Arduino controller.
 - `laser.auto_fire`: keep `false` for aiming/calibration; `true` sends `FIRE:ON`.
 - `laser.target_class`: logical class to target, usually `zombie`.
+- `laser.fallback_to_any_detection`: set `true` only if the head should track the nearest detected object when the target class is absent.
 - `laser.min_distance` and `laser.max_distance`: relative depth thresholds in the `0..1` range.
+- `laser.pan_gain`, `laser.tilt_gain`, and `laser.deadband_px`: closed-loop camera-on-pan/tilt aiming sensitivity.
+- `laser.invert_pan` and `laser.invert_tilt`: flip an axis if calibration shows it moves away from the target.
 
 ## Dataset And Training
 
