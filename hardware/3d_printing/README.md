@@ -39,7 +39,7 @@ At the moment, this repo includes `frame_base.stl`. The README below keeps the l
 | `pan_platform.stl` | planned | ~30g | 1.5-2h | $1 |
 | `tilt_arm.stl` | planned | ~25g | 1.5h | $0.75 |
 | `camera_bracket.stl` | planned | ~15g | 1h | $0.50 |
-| `laser_mount.stl` | planned | ~10g | 0.5-1h | $0.50 |
+| `accessory_mount.stl` | planned | ~10g | 0.5-1h | $0.50 |
 
 **Total: ~120g, 6-8.5 hours, $4-5 per set*
 
@@ -50,7 +50,7 @@ At the moment, this repo includes `frame_base.stl`. The README below keeps the l
 1. **First**: `frame_base.stl` (foundation)
 2. **Second**: `pan_platform.stl` (mounts to frame_base)
 3. **Third**: `tilt_arm.stl` (mounts to pan_platform)
-4. **Fourth**: `camera_bracket.stl` & `laser_mount.stl` (mounts to tilt_arm)
+4. **Fourth**: `camera_bracket.stl` and optional `accessory_mount.stl` (mounts to tilt_arm)
 
 ## Printing Tips
 
@@ -59,7 +59,7 @@ At the moment, this repo includes `frame_base.stl`. The README below keeps the l
 - **pan_platform**: Flat on bed to minimize supports
 - **tilt_arm**: Long axis parallel to bed
 - **camera_bracket**: Standard orientation
-- **laser_mount**: Minimal supports needed
+- **accessory_mount**: Minimal supports needed
 
 ### Post-Processing
 1. **Support Removal**: Use flush cutters for clean removal
