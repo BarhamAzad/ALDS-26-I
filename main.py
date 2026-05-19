@@ -119,24 +119,28 @@ class ObjectDetector:
         return frame
 
 
-class LaserController:
-    """Serial controller for the Arduino pan/tilt sketch."""
+class PanTiltController:
+    """Serial controller for the Arduino Mega + HW-170 pan/tilt sketch.
+
+    Uses the model-space command range expected by pan_tilt_controller.ino:
+    pan 90..270 with 180 centered, tilt 80..150 with 90 centered.
+    """
 
     def __init__(
         self,
         port: str,
         baud_rate: int = 9600,
-        pan_start: float = 90.0,
+        pan_start: float = 180.0,
         tilt_start: float = 90.0,
-        pan_min: float = 0.0,
-        pan_max: float = 180.0,
-        tilt_min: float = 0.0,
-        tilt_max: float = 180.0,
+        pan_min: float = 90.0,
+        pan_max: float = 270.0,
+        tilt_min: float = 80.0,
+        tilt_max: float = 150.0,
         pan_gain: float = 6.0,
         tilt_gain: float = 6.0,
         deadband_px: int = 20,
         command_interval: float = 0.05,
-        invert_pan: bool = False,
+        invert_pan: bool = True,
         invert_tilt: bool = False,
     ) -> None:
         self.port = port
@@ -167,7 +171,7 @@ class LaserController:
             self.move_to(self.current_pan, self.current_tilt, force=True)
         except Exception as exc:  # noqa: BLE001 - serial availability varies.
             self.is_connected = False
-            print(f"Warning: could not connect to laser controller: {exc}")
+            print(f"Warning: could not connect to pan/tilt controller: {exc}")
 
         return self.is_connected
 
@@ -213,15 +217,7 @@ class LaserController:
 
         return self.move_to(self.current_pan + pan_delta, self.current_tilt + tilt_delta)
 
-    def fire(self) -> None:
-        self.send("FIRE:ON")
-
-    def cease_fire(self) -> None:
-        self.send("FIRE:OFF")
-
     def disconnect(self) -> None:
-        if self.is_connected:
-            self.cease_fire()
         if self.serial_conn is not None:
             self.serial_conn.close()
         self.is_connected = False
@@ -264,7 +260,7 @@ class ALDS:
         self.config = self._load_config(config_path)
         detection_config = self.config["detection"]
         depth_config = self.config["depth"]
-        laser_config = self.config["laser"]
+        pan_tilt_config = self.config.get("pan_tilt", {})
         self.depth_enabled = bool(depth_config.get("enabled", True))
         self.depth_update_interval = max(1, int(depth_config.get("update_interval", 1)))
 
@@ -280,26 +276,26 @@ class ALDS:
             input_size=int(depth_config.get("input_size", 518)),
             initialize=self.depth_enabled,
         )
-        self.laser_controller = LaserController(
-            port=str(laser_config.get("port", "/dev/ttyUSB0")),
-            baud_rate=int(laser_config.get("baud_rate", 9600)),
-            pan_start=float(laser_config.get("pan_start", 90.0)),
-            tilt_start=float(laser_config.get("tilt_start", 90.0)),
-            pan_min=float(laser_config.get("pan_min", 0.0)),
-            pan_max=float(laser_config.get("pan_max", 180.0)),
-            tilt_min=float(laser_config.get("tilt_min", 0.0)),
-            tilt_max=float(laser_config.get("tilt_max", 180.0)),
-            pan_gain=float(laser_config.get("pan_gain", 6.0)),
-            tilt_gain=float(laser_config.get("tilt_gain", 6.0)),
-            deadband_px=int(laser_config.get("deadband_px", 20)),
-            command_interval=float(laser_config.get("command_interval", 0.05)),
-            invert_pan=bool(laser_config.get("invert_pan", False)),
-            invert_tilt=bool(laser_config.get("invert_tilt", False)),
+        self.pan_tilt_config = pan_tilt_config
+        self.pan_tilt_controller = PanTiltController(
+            port=str(pan_tilt_config.get("port", "/dev/ttyUSB0")),
+            baud_rate=int(pan_tilt_config.get("baud_rate", 9600)),
+            pan_start=float(pan_tilt_config.get("pan_start", 180.0)),
+            tilt_start=float(pan_tilt_config.get("tilt_start", 90.0)),
+            pan_min=float(pan_tilt_config.get("pan_min", 90.0)),
+            pan_max=float(pan_tilt_config.get("pan_max", 270.0)),
+            tilt_min=float(pan_tilt_config.get("tilt_min", 80.0)),
+            tilt_max=float(pan_tilt_config.get("tilt_max", 150.0)),
+            pan_gain=float(pan_tilt_config.get("pan_gain", 6.0)),
+            tilt_gain=float(pan_tilt_config.get("tilt_gain", 6.0)),
+            deadband_px=int(pan_tilt_config.get("deadband_px", 20)),
+            command_interval=float(pan_tilt_config.get("command_interval", 0.05)),
+            invert_pan=bool(pan_tilt_config.get("invert_pan", True)),
+            invert_tilt=bool(pan_tilt_config.get("invert_tilt", False)),
         )
-        self.target_class = str(laser_config.get("target_class", "zombie")).lower()
-        self.fallback_to_any_detection = bool(laser_config.get("fallback_to_any_detection", False))
-        self.laser_enabled = bool(laser_config.get("enabled", False))
-        self.auto_fire = bool(laser_config.get("auto_fire", False))
+        self.target_class = str(pan_tilt_config.get("target_class", "any")).lower()
+        self.fallback_to_any_detection = bool(pan_tilt_config.get("fallback_to_any_detection", False))
+        self.pan_tilt_enabled = bool(pan_tilt_config.get("enabled", False))
         self.video_writer: VideoWriter | None = None
 
     @staticmethod
@@ -361,8 +357,8 @@ class ALDS:
         best_target = None
         best_score = -1.0
         frame_area = float(frame_shape[0] * frame_shape[1])
-        min_depth = float(self.config["laser"].get("min_distance", 0.0))
-        max_depth = float(self.config["laser"].get("max_distance", 1.0))
+        min_depth = float(self.pan_tilt_config.get("min_distance", 0.0))
+        max_depth = float(self.pan_tilt_config.get("max_distance", 1.0))
 
         for detection in candidates:
             bbox = detection["bbox"]
@@ -421,10 +417,10 @@ class ALDS:
             lines.append("Depth disabled: using bbox-size fallback")
         elif not self.depth_estimator.is_ready:
             lines.append("Depth unavailable: using bbox-size fallback")
-        if self.laser_enabled and not self.laser_controller.is_connected:
-            lines.append("Laser controller offline")
-        if self.laser_enabled and not self.auto_fire:
-            lines.append("Servo aiming enabled; auto fire off")
+        if self.pan_tilt_enabled and not self.pan_tilt_controller.is_connected:
+            lines.append("Pan/tilt controller offline")
+        if self.pan_tilt_enabled and self.pan_tilt_controller.is_connected:
+            lines.append("Pan/tilt tracking enabled")
 
         for index, line in enumerate(lines):
             cv2.putText(
@@ -443,8 +439,8 @@ class ALDS:
             print("Failed to open video source")
             return
 
-        if self.laser_enabled:
-            self.laser_controller.connect()
+        if self.pan_tilt_enabled:
+            self.pan_tilt_controller.connect()
         self._open_writer()
 
         frame_index = 0
@@ -479,15 +475,9 @@ class ALDS:
                 target = self.find_nearest_target(detections, depth, frame.shape)
                 pan_tilt = None
                 if target is not None:
-                    if self.laser_enabled and self.laser_controller.is_connected:
-                        pan_tilt = self.laser_controller.target_bbox(target["bbox"], frame.shape)
-                        if self.auto_fire:
-                            self.laser_controller.fire()
-                        else:
-                            self.laser_controller.cease_fire()
+                    if self.pan_tilt_enabled and self.pan_tilt_controller.is_connected:
+                        pan_tilt = self.pan_tilt_controller.target_bbox(target["bbox"], frame.shape)
                     self.draw_target(output_frame, target, pan_tilt)
-                elif self.laser_enabled:
-                    self.laser_controller.cease_fire()
 
                 self.draw_status(output_frame, detections)
                 cv2.imshow("ALDS", output_frame)
@@ -503,7 +493,7 @@ class ALDS:
             cap.release()
             if self.video_writer is not None:
                 self.video_writer.release()
-            self.laser_controller.disconnect()
+            self.pan_tilt_controller.disconnect()
             cv2.destroyAllWindows()
 
 

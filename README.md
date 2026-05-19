@@ -1,6 +1,6 @@
-# Autonomous Laser Defense System (ALDS-26-I)
+# Autonomous Pan/Tilt Detection System (ALDS-26-I)
 
-Computer-vision prototype for tracking people and optional custom target classes with YOLO, relative monocular depth estimation, and Arduino pan/tilt laser control.
+Computer-vision prototype for tracking objects with YOLO, relative monocular depth estimation, and Arduino Mega + HW-170 pan/tilt servo control.
 
 ## What This Repo Does
 
@@ -8,7 +8,7 @@ Computer-vision prototype for tracking people and optional custom target classes
 - Detects people with YOLO out of the box.
 - Supports an additional custom target class such as `zombie` if your YOLO checkpoint was trained with it.
 - Estimates relative depth with Depth Anything V2 when the model is available.
-- Sends `PAN`, `TILT`, and `FIRE` commands to an Arduino controller when hardware is enabled.
+- Sends `PAN` and `TILT` commands to an Arduino Mega controller when hardware is enabled.
 
 ## Course Project Framing
 
@@ -27,7 +27,7 @@ Camera or video -> YOLO detection -> relative depth/proximity scoring -> target 
 
 ## Important Defaults
 
-- `configs/config.yaml` ships with `laser.enabled: false` for safe desktop testing.
+- `configs/config.yaml` ships with `pan_tilt.enabled: false` for safe desktop testing.
 - The default config points at a local fine-tuned checkpoint under `runs/`. That directory is ignored by Git, so new clones must either train/download that checkpoint or set `detection.model` to another local `.pt` file.
 - The repo also includes `models/yolo26s.pt` as a base YOLO26 model.
 - YOLO labels named `person` are mapped to the logical label `human`.
@@ -52,7 +52,7 @@ ALDS-26-I/
 ├── scripts/
 │   └── extract_frames.py     # Sparse frame extraction for annotation
 ├── hardware/
-│   ├── arduino/              # Servo and fire-control firmware
+│   ├── arduino/              # Arduino Mega + HW-170 pan/tilt firmware
 │   ├── mechanical/           # Assembly and calibration notes
 │   └── 3d_printing/          # Printed part notes and available STL files
 ├── models/                   # Local base/model weights
@@ -95,13 +95,13 @@ Key settings in `configs/config.yaml`:
 - `depth.device`: `auto`, `cpu`, or `cuda`.
 - `depth.input_size`: square model input size for Depth Anything V2.
 - `depth.update_interval`: estimate depth every N frames to improve live preview speed.
-- `laser.enabled`: set to `true` only after wiring and testing the Arduino controller.
-- `laser.auto_fire`: keep `false` for aiming/calibration; `true` sends `FIRE:ON`.
-- `laser.target_class`: logical class to target, usually `zombie`.
-- `laser.fallback_to_any_detection`: set `true` only if the head should track the nearest detected object when the target class is absent.
-- `laser.min_distance` and `laser.max_distance`: relative depth thresholds in the `0..1` range.
-- `laser.pan_gain`, `laser.tilt_gain`, and `laser.deadband_px`: closed-loop camera-on-pan/tilt aiming sensitivity.
-- `laser.invert_pan` and `laser.invert_tilt`: flip an axis if calibration shows it moves away from the target.
+- `pan_tilt.enabled`: set to `true` only after wiring and testing the Arduino controller.
+- `pan_tilt.target_class`: use `any` to track the nearest configured detection, currently `human` or `zombie`.
+- `pan_tilt.fallback_to_any_detection`: set `true` only if the head should track the nearest detected object when the target class is absent.
+- `pan_tilt.min_distance` and `pan_tilt.max_distance`: relative depth thresholds in the `0..1` range.
+- `pan_tilt.pan_gain`, `pan_tilt.tilt_gain`, and `pan_tilt.deadband_px`: closed-loop camera-on-pan/tilt aiming sensitivity.
+- `pan_tilt.pan_min/max` and `pan_tilt.tilt_min/max`: Arduino model-space limits; the current sketch uses `PAN 90..270` and `TILT 80..150`.
+- `pan_tilt.invert_pan` and `pan_tilt.invert_tilt`: flip an axis if calibration shows it moves away from the target.
 
 ## Dataset And Training
 
@@ -138,9 +138,9 @@ Keep generated experiment artifacts in `runs/` and summarize the chosen runs in 
 
 ## Safety And Ethics
 
-- Keep `laser.enabled: false` for software-only testing.
-- Keep `laser.auto_fire: false` during calibration and demos unless firing is intentional and safe.
-- Test with a harmless LED or disconnected laser before using any laser module.
+- Keep `pan_tilt.enabled: false` for software-only testing.
+- Enable pan/tilt hardware only after the Arduino Mega and HW-170 pass manual serial tests.
+- Power MG996R servos from the external regulator, not from the Arduino Mega 5V pin.
 - Treat the `human` class as protected; do not configure automatic targeting for people.
 - Document limitations and failure cases clearly in reports and presentations.
 

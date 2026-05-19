@@ -1,4 +1,4 @@
-# Zombie Laser Targeting System Configuration
+# ALDS Pan/Tilt Targeting System Configuration
 
 # YOLO26 Detection Settings
 detection:
@@ -18,35 +18,34 @@ depth:
   input_size: 256
   update_interval: 8  # Estimate depth every N frames for faster live preview
 
-# Laser Control Settings
-laser:
-  enabled: false
-  auto_fire: false      # Keep false for servo aiming/calibration; true sends FIRE:ON
-  port: /dev/ttyUSB0  # Serial port for laser control
+# Pan/Tilt Control Settings
+pan_tilt:
+  enabled: true
+  port: /dev/cu.usbserial-10  # Serial port for Arduino Mega pan/tilt control
   baud_rate: 9600
-  target_class: zombie  # Only target zombies, exclude humans
+  target_class: any     # Track the nearest detected human or zombie
   fallback_to_any_detection: false
   min_distance: 0.05    # Minimum relative depth value (0..1)
   max_distance: 0.95    # Maximum relative depth value (0..1)
-  pan_start: 90
+  pan_start: 180
   tilt_start: 90
-  pan_min: 0
-  pan_max: 180
-  tilt_min: 0
-  tilt_max: 180
-  pan_gain: 6.0         # Degrees to correct when target is at frame edge
-  tilt_gain: 6.0        # Degrees to correct when target is at frame edge
-  deadband_px: 20       # Do not move when target is close enough to center
-  command_interval: 0.05
-  invert_pan: false     # Flip if the pan axis moves away from the target
+  pan_min: 90
+  pan_max: 270
+  tilt_min: 80
+  tilt_max: 150
+  pan_gain: 2.0         # Lower value = slower correction toward the target
+  tilt_gain: 2.0        # Lower value = slower correction toward the target
+  deadband_px: 30       # Do not move when target is close enough to center
+  command_interval: 0.20
+  invert_pan: true      # Pan range is reversed: 270=min horizontal, 180=center, 90=max
   invert_tilt: false    # Flip if the tilt axis moves away from the target
 
 # Video Input Settings
 video:
   source: 0  # 0 for webcam, or path to video file
   fps: 30
-  width: 640
-  height: 480
+  width: 1200
+  height: 800
   flip_horizontal: false
 
 # Output Settings
