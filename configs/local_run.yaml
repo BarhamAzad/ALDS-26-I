@@ -1,0 +1,51 @@
+# Local software-only demo config using the checkpoint committed in this repo.
+detection:
+  model: models/yolo26s.pt
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+  classes:
+    - human
+    - zombie
+
+depth:
+  enabled: false
+  model: depth_anything_v2
+  encoder: vits
+  device: auto
+  input_size: 256
+  update_interval: 8
+
+pan_tilt:
+  enabled: false
+  port: /dev/ttyUSB0
+  baud_rate: 9600
+  target_class: any
+  fallback_to_any_detection: false
+  min_distance: 0.05
+  max_distance: 0.95
+  pan_start: 180
+  tilt_start: 90
+  pan_min: 90
+  pan_max: 270
+  tilt_min: 80
+  tilt_max: 150
+  pan_gain: 2.0
+  tilt_gain: 2.0
+  deadband_px: 30
+  command_interval: 0.20
+  invert_pan: true
+  invert_tilt: false
+
+video:
+  source: 0
+  fps: 30
+  width: 640
+  height: 480
+  flip_horizontal: false
+
+output:
+  save_results: true
+  results_dir: results/
+  save_video: false
+  draw_bbox: true
+  draw_depth: false
